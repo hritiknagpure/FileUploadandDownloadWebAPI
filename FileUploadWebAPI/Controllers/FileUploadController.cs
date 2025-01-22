@@ -6,6 +6,8 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using System.Linq;
 using System;
+using System.Collections.Generic;
+using FileUploadWebAPI.DTO.FileUploadWebAPI.Models;
 
 namespace FileUploadWebAPI.Controllers
 {
@@ -16,18 +18,12 @@ namespace FileUploadWebAPI.Controllers
         private readonly AppDbContext _context;
         private readonly ILogger<FileUploadController> _logger;
 
-        // Injecting AppDbContext and ILogger to log events
         public FileUploadController(AppDbContext context, ILogger<FileUploadController> logger)
         {
             _context = context;
             _logger = logger;
         }
 
-        /// <summary>
-        /// Upload a file and store its metadata in the database.
-        /// </summary>
-        /// <param name="file">The file to be uploaded</param>
-        /// <returns>Result with the file's metadata</returns>
         [HttpPost("Upload")]
         public async Task<IActionResult> UploadFile(IFormFile file)
         {
@@ -44,7 +40,16 @@ namespace FileUploadWebAPI.Controllers
                 return BadRequest("File size exceeds the maximum allowed limit of 10MB.");
             }
 
-            var allowedContentTypes = new[] { "image/jpeg", "image/png", "image/gif", "image/jpg" };
+            var allowedContentTypes = new[] {
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/jpg",
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+};
+
             if (!allowedContentTypes.Contains(file.ContentType))
             {
                 _logger.LogWarning($"Invalid file type: {file.ContentType}");
@@ -71,7 +76,14 @@ namespace FileUploadWebAPI.Controllers
 
                     _logger.LogInformation($"File uploaded successfully: {fileDetail.FileName}, Size: {fileDetail.FileSize} bytes.");
 
-                    return Ok(new { fileDetail.Id, fileDetail.FileName, fileDetail.FileSize });
+                    // Return only the FileName and ContentType to the client
+                    var fileMetadata = new FileMetadataDTO
+                    {
+                        FileName = fileDetail.FileName,
+                        ContentType = fileDetail.ContentType
+                    };
+
+                    return Ok(fileMetadata);
                 }
                 catch (Exception ex)
                 {
@@ -81,11 +93,6 @@ namespace FileUploadWebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Retrieve a file from the database by its ID.
-        /// </summary>
-        /// <param name="id">The ID of the file</param>
-        /// <returns>File content or NotFound</returns>
         [HttpGet("{id}")]
         public async Task<IActionResult> GetFile(int id)
         {
@@ -99,13 +106,15 @@ namespace FileUploadWebAPI.Controllers
 
             _logger.LogInformation($"File retrieved successfully: {fileDetail.FileName}, ID: {id}");
 
-            return File(fileDetail.Data, fileDetail.ContentType, fileDetail.FileName);
+            var fileMetadata = new FileMetadataDTO
+            {
+                FileName = fileDetail.FileName,
+                ContentType = fileDetail.ContentType
+            };
+
+            return Ok(fileMetadata);
         }
 
-        /// <summary>
-        /// Retrieve all files from the database.
-        /// </summary>
-        /// <returns>List of file metadata</returns>
         [HttpGet("All")]
         public IActionResult GetAllFiles()
         {
@@ -116,15 +125,15 @@ namespace FileUploadWebAPI.Controllers
                 return NotFound("No files found.");
             }
 
-            return Ok(files.Select(f => new { f.Id, f.FileName, f.FileSize, f.UploadedDate }));
+            var fileMetadataList = files.Select(f => new FileMetadataDTO
+            {
+                FileName = f.FileName,
+                ContentType = f.ContentType
+            }).ToList();
+
+            return Ok(fileMetadataList);
         }
 
-        /// <summary>
-        /// Update file metadata in the database.
-        /// </summary>
-        /// <param name="id">The ID of the file to update</param>
-        /// <param name="file">The new file to upload</param>
-        /// <returns>Updated file metadata</returns>
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateFile(int id, IFormFile file)
         {
@@ -172,7 +181,13 @@ namespace FileUploadWebAPI.Controllers
 
                     _logger.LogInformation($"File updated successfully: {fileDetail.FileName}, Size: {fileDetail.FileSize} bytes.");
 
-                    return Ok(new { fileDetail.Id, fileDetail.FileName, fileDetail.FileSize });
+                    var fileMetadata = new FileMetadataDTO
+                    {
+                        FileName = fileDetail.FileName,
+                        ContentType = fileDetail.ContentType
+                    };
+
+                    return Ok(fileMetadata);
                 }
                 catch (Exception ex)
                 {
@@ -182,11 +197,6 @@ namespace FileUploadWebAPI.Controllers
             }
         }
 
-        /// <summary>
-        /// Delete a file from the database by its ID.
-        /// </summary>
-        /// <param name="id">The ID of the file to delete</param>
-        /// <returns>Action result</returns>
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteFile(int id)
         {
@@ -205,7 +215,7 @@ namespace FileUploadWebAPI.Controllers
 
                 _logger.LogInformation($"File deleted successfully: {fileDetail.FileName}, ID: {id}");
 
-                return NoContent(); // No content to return after successful deletion
+                return NoContent();
             }
             catch (Exception ex)
             {
